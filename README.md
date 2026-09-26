@@ -1,160 +1,113 @@
-"# project-fall25-He1lscythe" 
+# Japanese Mahjong Game Record Management System
 
-# Group members
+A full-stack web app for recording Japanese (Riichi) Mahjong games round by round,
+recalculating scores, and comparing players' performance.
 
-**Jiacong Li** ,,,,,,,                     Dawei Feng
+**Stack:** React 19 · Vite · Tailwind CSS · Recharts · Node.js · Express · PostgreSQL · Prisma ORM
 
-# Project Framework
+Built as a course project at Northeastern University, Fall 2025.
+
+## Highlights
+
+- **Real data.** The database is seeded with **386 games (4,150 rounds)** played on
+  [Mahjong Soul](https://game.maj-soul.com/) between August and November 2025, across
+  8 players and 3 rule sets.
+- **Statistics computed in SQL.** A single PostgreSQL query built from CTEs and
+  `FILTER` aggregates returns 15 statistics per player: total games, highest and
+  lowest score, average rank, busting rate, win rate, deal-in rate, tsumo rate,
+  tenpai-at-draw rate, exhaustive-draw rate, open-hand rate, riichi rate, dama rate,
+  and average points won and lost, using `NULLIF` to avoid division by zero.
+- **Cascading score recalculation.** On the upload form, changing any round's result
+  recalculates that round's score changes and passes the new starting scores to every
+  later round, so final scores and rankings always match the round history.
+- **Atomic imports.** Each game (session, players, rounds, per-round player status) is
+  written in one Prisma transaction, so a malformed record never leaves a partial game
+  in the database.
+- **Auth and roles.** Passwords are hashed with bcrypt, sessions use JWT, and admin-only
+  routes are protected by role-based middleware.
+
+## Features
+
+**Players**
+
+- Register, log in, and edit their profile, including whether their stats are public
+- Upload a game with round-by-round details
+- See personal statistics and charts on the home page
+- Browse match history filtered by rule set and final ranking, and open any game's
+  full round log
+- Search for other players and compare points head to head
+
+**Admins**
+
+- View all accounts and ban or reactivate users
+- View any player's games and delete invalid sessions
+
+## Database design
+
+Six tables: `users`, `game_types`, `game_sessions`, `session_players`, `round_records`,
+and `round_player_status`. Per-round player state (win, tsumo, deal-in, open hand,
+riichi, tenpai, han, fu, score change) is stored at the grain of one player in one round.
+
+![E-R diagram](report/ERD.png)
+
+The relational model is in [report/RelationalModel.png](report/RelationalModel.png),
+and the full DDL and data dump in [backend/mahjong_db.sql](backend/mahjong_db.sql).
+
+## API
+
+| Area | Endpoints |
+| --- | --- |
+| Auth | `POST /api/auth/register`, `POST /api/auth/login`, `GET /api/auth/me`, `PUT /api/auth/profile` |
+| Games | `POST /api/gamesession/upload`, `GET /api/gamesession/detail` |
+| Players | `GET /api/user/gamesession`, `GET /api/user/roundplayers`, `GET /api/user/datagrid/:id`, `GET /api/user/search`, `GET /api/user/comparepoints`, `GET /api/user/:id` |
+| Rule sets | `GET /api/gametype/list`, `GET /api/gametype/detail` |
+| Admin | `GET /api/admin/users`, `PUT /api/admin/user/:id/status`, `DELETE /api/admin/gamesession/:uuid` |
+
+The [course report](report/li_final_report.md) describes each flow in more detail.
+
+## Project structure
 
 ```
-final/
-├── dataset/       json files of gamesession records for presentation
-|                  imported using  npx prisma db seed
-├── my-app/ (front-end: react + vite + tailwind) ---> front-end starts from this 
-│   │                                       directory using  npm run dev
+├── my-app/                 front end (React + Vite + Tailwind CSS)
+│   └── src/
+│       ├── components/     pages: upload, match history, search, stats, profile
+│       ├── admin/          admin views and route guard
+│       ├── contexts/       AuthContext (authentication state)
+│       ├── services/       api.js (HTTP client)
+│       └── model/          E-R diagram and relational model pages
+├── backend/                API server (Node.js + Express + Prisma)
 │   ├── src/
-│   │   ├── components/
-│   │   │   ├── Login.jsx         
-│   │   │   ├── Register.jsx      
-│   │   │   ├── Navbar.jsx
-│   │   │   ├── UserMainPage.jsx
-│   │   │   └── other pages ...
-│   │   │
-│   │   │── model/
-│   │   │   ├── ERDiagram.jsx              # 
-│   │   │   └── RelationalModel.jsx
-│   │   │   
-│   │   ├── services/
-│   │   │   └── api.js                     # front-end api
-│   │   │   │   └── ApiService             # send req, return res
-│   │   ├── contexts/
-│   │   │   └── AuthContext.jsx            # Authentication
-│   │   │                                  # & call ApiService
-│   │   ├── admin/                   
-│   │   │   ├── AdminUsers.jsx             # Admin views
-│   │   │   └── AdminRoute.jsx
-│   │   ├── App.jsx
-│   │   └── main.jsx
-│   ├── index.html
-│   ├── vite.config.js
-│   └── tailwind.config.js
-│
-└── backend/ (backend: node.js + postgresql + prisma) 
-    |                     backend starts from this directory using: npm run dev 
-    |                                 prisma: npx prisma studio --port 5556
-    ├── src
-    │   ├── server.js                     # main entry
-    │   ├── prisma.js                     # to call prisma client
-    │   │
-    │   ├── middlewares/
-    │   │   ├── auth.js                   # authMiddleware
-    │   │   └── admin.js                  # adminMiddleware
-    │   │
-    │   ├── routes/                       # routers
-    │   │   │
-    │   │   ├── authRoutes.js             # /api/auth/*
-    │   │   ├── userRoutes.js             # /api/user/*
-    │   │   ├── gameTypeRoutes.js         # /api/gamestype/*
-    │   │   ├── gameSessionRoutes.js      # /api/gamesession/*
-    │   │   └── adminRoutes.js            # /api/admin/*
-    │   │
-    │   ├── controllers/                  # functionalities applied in this file
-    │   │   │
-    │   │   ├── authController.js         # login, register, get/update profile
-    │   │   ├── userController.js         # game session, round records()
-    │   │   ├── gameTypeController.js
-    │   │   ├── gameSessionController.js
-    │   │   └── adminController.js
-    │   │                                 
-    │   ├── utils/
-	│   │   └── token.js                  # generateToken, verifyToken
-    │   │
-    ├── prisma 
-    │   ├── schema.prisma             schema
-    │   └── seed.js                   default data (including admin account)
-    |
-    ├── package.json
-    └── .env                       
+│   │   ├── routes/         auth, user, gametype, gamesession, admin
+│   │   ├── controllers/    request handlers and SQL queries
+│   │   ├── middlewares/    JWT auth and admin checks
+│   │   └── utils/          token helpers, data import
+│   └── prisma/             schema, migrations, seed script
+├── dataset/                386 game records (JSON), loaded by the seed script
+└── report/                 course report, E-R diagram, relational model
 ```
 
-# Goals & plans
+## Running locally
 
-Please refer to the [proposal.md](./proposal/proposal.md) and [plans.md](./proposal/plan.md).
+Requires Node.js 20.19+ (for Vite 7) and PostgreSQL.
 
-# Accomplishments
-
-## Front-end
-
-- [x] login and register page
-
-User views:
-
-- [x] statistics at homepage
-- [x] upload page
-  - [x] upload you game session records and update in the database
-
-- [x] match history page 
-  - [x] filters with game type and ranking
-  - [x] view game session details
-  - [ ] editable/deletable after uploaded
-- [x] search page
-  - [x] navigate to target user's page
-  - [x] compare points with target user
-
-- [x] user profile page (todo)
-  - [x] update username/email/open
-  - [ ] update password
-
-Admin views:
-
-- [x] all registered users/admins available
-  - [x] be able to ban/active an account
-  - [x] view users' game sessions
-- [x] game sessions page
-  - [x] all game sessions deletable
-
-## Backend
-
-- [x] Node.js applied
-- [x] All functionalities from front-end applied
-- [x] User and admin authentication applied
-- [x] Password stored with encryption and give user token
-
-## Database
-
-- [x] PostgreSQL applied
-- [x] Prisma applied as ORM
-- [x] ER Diagram & Relational Model for database
-
-# User Guidelines
-
-## Installation guide
-
-### step 1: database setup
-
-use psql or pgAdmin:
-
-```sql
-CREATE DATABASE mahjong_db;
-```
-
-or via command line:
+**1. Create the database**
 
 ```bash
 psql -U postgres -c "CREATE DATABASE mahjong_db;"
 ```
 
-### step 2: backend setup
-
-navigate to the backend directory 
+**2. Start the back end**
 
 ```bash
 cd backend
 npm install
-cp .env.eg .env
+cp .env.eg .env        # then edit DATABASE_URL and JWT_SECRET
+npx prisma migrate dev
+npx prisma db seed     # rule sets, demo accounts, and the 386 games
+npm run dev            # http://localhost:5000
 ```
 
-edit `.env` and configure your database connection:
+`.env` looks like:
 
 ```env
 DATABASE_URL="postgresql://postgres:YOUR_PASSWORD@localhost:5432/mahjong_db"
@@ -162,122 +115,30 @@ PORT=5000
 JWT_SECRET=your_jwt_secret_key
 ```
 
-prisma
+> The project uses Prisma 6.19. It does not work with Prisma 7 or later.
 
-**The prisma version is v6.19.0, it would not work with version later than v7.0!!** 
-
-```bash
-npx prisma migrate dev
-npx prisma db seed
-```
-
-**All initial data would be inserted with seed.js**
-
-run backend server
-
-```
-npm run dev
-```
-
-the backend will be running at `http://localhost:5000`
-
-### step 3: front-end setup
-
-open a new terminal and navigate to the frontend directory
+**3. Start the front end**
 
 ```bash
 cd my-app
 npm install
-npm run dev
+npm run dev            # http://localhost:5173
 ```
 
-the frontend will be running at `http://localhost:5173`
+To browse the data directly, run `npx prisma studio --port 5556` from `backend/`, or
+import [backend/mahjong_db.sql](backend/mahjong_db.sql) into DBeaver.
 
-### step 4: Prisma studio
+### Demo accounts (created by the seed script, local use only)
 
-```bash
-cd backend
-npx prisma studio --port 5556
-```
+| Role | Username | Password |
+| --- | --- | --- |
+| Player | `YuuNecro`, `Eucliwood`, `Hellscythe`, `Inui` | `Password1` |
+| Admin | `Admin0` | `Test0000` |
 
-you can view database at `http://localhost:5556`
+## Credits
 
-### For Dbeaver
+Built by Jiacong Li. Course group partner: Dawei Feng.
 
-You can import schema and all data using [mahjong_db.sql](./backend/mahjong_db.sql) without frontend/backend.
-
-## Usage Guide
-
-### E-R Diagram & Relational Model
-
-* Those can be seen from the link shown in login page.
-
-### For User
-
-* User can create account and upload game records with round details.
-* User can view game session history with filters.
-* User can check session details after uploaded
-* User can view statistics at homepage 
-* User can search other users'(players) stats page.
-* default user accounts: written in `seed.js`.
-
-| username   | password  |
-| ---------- | --------- |
-| YuuNecro   | Password1 |
-| Eucliwood  | Password1 |
-| Hellscythe | Password1 |
-| Inui       | Password1 |
-
-### For Admin
-
-* can view all users' info
-* ban or reactive user's account
-* can view any game sessions and delete them
-* default admin account
-  * Username: Admin0
-  * Password: Test0000
-
-# Final report for CS5200
-
-Please refer to [report.pdf](./report/li_final_report.pdf) or [report.md](./report/li_final_report.md)
-
-
-# New Functionalities
-
-* Pie chart, area chart from recharts.
-* `AuthContext.jsx` only focus on authentication state management.
-
-# Use of LLMs
-
-* A lot of explanations on how the class names works, especially about `flex` , element moves unexpectedly after I use `flex` on parent element.
-* Complicated logics in `UploadPage.jsx` , one or some of the state in one round changes will effect corresponding rounds and final scores/rankings. Scores changes and players state would be calculated in `<Onekyoku />` based on the buttons and would pass out to `<WholeGame />`, changes would trigger recalculate and new `startingscore` would be passed into next `<Onekyoku />`.
-
-# Acknowledgments/References
-
-* https://game.maj-soul.com/  a platform to play Japanese Mahjong online, where I collect session data after playing.
-* https://amae-koromo.sapk.ch/  a mahjong record collection website, where I reference the layout and choose important stats to collect.
-* https://nerdcave.com/tailwind-cheat-sheet cheat sheet site for writing tailwind.
-* https://www.w3schools.com/REACT/DEFAULT.ASP react tutorial website, especially for using react hooks.
-* https://www.w3schools.com/js/default.asp JavaScript tutorial
-* https://blog.csdn.net/2402_84971234/article/details/147319353 JWT authorization.
-* https://prisma.org.cn/docs/getting-started/prisma-orm/quickstart/postgresql Prisma
-* https://zhuanlan.zhihu.com/p/1953579241464661901 Tutorial on using Prisma.
-* https://kentcdodds.com/blog/authentication-in-react-applications, https://zhuanlan.zhihu.com/p/67055572, https://developer.aliyun.com/article/1625120 Authentication in react.
-* https://recharts.github.io/ used pie chart and area chart with recharts
-
-# Lessons learned
-
-Toooooooooooo much challenges.
-
-* New to JavaScript, html, CSS, front-end tools -- react, backend tools -- node.js, tailwind. -- Spent lots of time reading the tutorial and playing with some examples that I ask Claude to generate. 
-
-* Feel difficult on using react hooks. -- I just used lots of `console.log()` to understand whether hooks are triggered, and how it works.
-
-
-
-
-
-
-
-
-
+- Game data: [Mahjong Soul](https://game.maj-soul.com/)
+- Statistics layout inspired by [amae-koromo](https://amae-koromo.sapk.ch/)
+- Charts: [Recharts](https://recharts.github.io/)
